@@ -1,13 +1,12 @@
 package react_fullstack_go_server
 
-
 func createComponentParams(params *ComponentFactoryParams) *ComponentParams {
 	return &ComponentParams{
-		View: func(layer uint16, view string) View {
+		View: func(layer uint16, view string, viewParent *View) View {
 			viewIsOn := false
 			dataProps := make(map[string]interface{})
 			functionProps := make(map[string]func(arguments [][]byte) interface{})
-			uuidString := stringUuid()
+			uuidString := StringUuid()
 			makeProps := func() []*ShareableViewDataProps {
 				props := make([]*ShareableViewDataProps, 0, len(dataProps)+len(functionProps))
 				for name, prop := range dataProps {
@@ -19,7 +18,7 @@ func createComponentParams(params *ComponentFactoryParams) *ComponentParams {
 					})
 				}
 				for name, propHandler := range functionProps {
-					handlerUuid := stringUuid()
+					handlerUuid := StringUuid()
 					params.ListenToFunctionProps(handlerUuid, propHandler)
 					props = append(props, &ShareableViewDataProps{
 						Name: name,
@@ -31,10 +30,14 @@ func createComponentParams(params *ComponentFactoryParams) *ComponentParams {
 				return props
 			}
 			createViewData := func() *ShareableViewData {
+				viewParentUuid := params.ParentUuid
+				if viewParent != nil {
+					viewParentUuid = viewParent.Uuid
+				}
 				return &ShareableViewData{
 					Uuid:       uuidString,
 					Name:       view,
-					ParentUuid: params.ParentUuid,
+					ParentUuid: viewParentUuid,
 					ChildIndex: layer,
 					IsRoot:     params.IsRoot,
 					Props:      makeProps(),
@@ -61,8 +64,9 @@ func createComponentParams(params *ComponentFactoryParams) *ComponentParams {
 				Uuid: uuidString,
 			}
 		},
-		Run: func(component func(params *ComponentParams), viewParent View) {
+		Run: func(component Component, viewParent View) (stop func()) {
 			parentUuid := ""
+			var cancelListeners []func()
 			if &viewParent != nil {
 				parentUuid = viewParent.Uuid
 			}
@@ -73,7 +77,15 @@ func createComponentParams(params *ComponentFactoryParams) *ComponentParams {
 				CreateViewData:        params.CreateViewData,
 				RemoveViewData:        params.RemoveViewData,
 				ListenToFunctionProps: params.ListenToFunctionProps,
+				ListenToComponentCancel: func(onCancel func()) {
+					cancelListeners = append(cancelListeners, onCancel)
+				},
 			}))
+			return func() {
+				for _, onCancel := range cancelListeners {
+					onCancel()
+				}
+			}
 		},
 	}
 }

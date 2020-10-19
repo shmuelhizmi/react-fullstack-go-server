@@ -5,17 +5,17 @@ import (
 	gosocketio "github.com/graarh/golang-socketio"
 )
 
-
 func App(transport *gosocketio.Server, rootComponent func(params *ComponentParams)) AppInstance {
 	isAppRunning := true
 	var shareableViewData []*ShareableViewData
 	transport.On("request_views_tree", func(sender *gosocketio.Channel) {
 		sender.Emit("update_views_tree", TransportUpdateTree{Views: shareableViewData})
 	})
-	transport.On( gosocketio.OnConnection ,func(sender *gosocketio.Channel) {
+	transport.On(gosocketio.OnConnection, func(sender *gosocketio.Channel) {
 		sender.Emit("update_views_tree", TransportUpdateTree{Views: shareableViewData})
 	})
-	rootComponent(createComponentParams(&ComponentFactoryParams{
+	var rootComponentCancelListeners []func()
+	go rootComponent(createComponentParams(&ComponentFactoryParams{
 		IsRoot:     true,
 		ParentUuid: "",
 		UpdateViewData: func(viewData *ShareableViewData) {
@@ -66,6 +66,9 @@ func App(transport *gosocketio.Server, rootComponent func(params *ComponentParam
 				}
 			})
 		},
+		ListenToComponentCancel: func(onCancel func()) {
+			rootComponentCancelListeners = append(rootComponentCancelListeners, onCancel)
+		},
 	}))
 	return AppInstance{
 		IsAppRunning: &isAppRunning,
@@ -75,6 +78,11 @@ func App(transport *gosocketio.Server, rootComponent func(params *ComponentParam
 		Continue: func() {
 			isAppRunning = true
 			transport.BroadcastToAll("update_views_tree", TransportUpdateTree{Views: shareableViewData})
+		},
+		Cancel: func() {
+			for _, onCancel := range rootComponentCancelListeners {
+				onCancel()
+			}
 		},
 	}
 }

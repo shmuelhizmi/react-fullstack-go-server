@@ -10,9 +10,9 @@ type View struct {
 }
 
 type ShareableViewDataProps struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
-	Uuid string `json:"uid"`
+	Name string      `json:"name"`
+	Type string      `json:"type"`
+	Uuid string      `json:"uid"`
 	Data interface{} `json:"data"`
 }
 
@@ -25,24 +25,30 @@ type ShareableViewData struct {
 	Props      []*ShareableViewDataProps `json:"props"`
 }
 
+type Component func(params *ComponentParams)
+
+type CreateView func(layer uint16, view string, viewParent *View) View
+
 type ComponentParams struct {
-	View func(layer uint16, view string) View
-	Run  func(component func(params *ComponentParams), viewParent View)
+	View CreateView
+	Run  func(component Component, viewParent View) (stop func())
 }
 
 type AppInstance struct {
 	IsAppRunning *bool
 	Stop         func()
 	Continue     func()
+	Cancel       func()
 }
 
 type ComponentFactoryParams struct {
-	IsRoot                bool
-	ParentUuid            string
-	UpdateViewData        func(viewData *ShareableViewData)
-	CreateViewData        func(viewData *ShareableViewData)
-	RemoveViewData        func(uuidString string)
-	ListenToFunctionProps func(propUuid string, handler func(data [][]byte) interface{})
+	IsRoot                  bool
+	ParentUuid              string
+	UpdateViewData          func(viewData *ShareableViewData)
+	CreateViewData          func(viewData *ShareableViewData)
+	RemoveViewData          func(uuidString string)
+	ListenToFunctionProps   func(propUuid string, handler func(data [][]byte) interface{})
+	ListenToComponentCancel func(onCancel func())
 }
 
 type TransportEventRequest struct {
@@ -53,8 +59,8 @@ type TransportEventRequest struct {
 
 type TransportEventResponse struct {
 	Data      interface{} `json:"data"`
-	Uuid      string `json:"uid"`
-	EventUuid string `json:"eventUid"`
+	Uuid      string      `json:"uid"`
+	EventUuid string      `json:"eventUid"`
 }
 
 type TransportViewUpdate struct {
