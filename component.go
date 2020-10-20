@@ -1,5 +1,7 @@
 package react_fullstack_go_server
 
+import "go/types"
+
 func createComponentParams(params *ComponentFactoryParams) *ComponentParams {
 	return &ComponentParams{
 		View: func(layer uint16, view string, viewParent *View) View {
@@ -22,7 +24,7 @@ func createComponentParams(params *ComponentFactoryParams) *ComponentParams {
 					params.ListenToFunctionProps(handlerUuid, propHandler)
 					props = append(props, &ShareableViewDataProps{
 						Name: name,
-						Type: "data",
+						Type: "event",
 						Uuid: handlerUuid,
 						Data: nil,
 					})
@@ -43,6 +45,11 @@ func createComponentParams(params *ComponentFactoryParams) *ComponentParams {
 					Props:      makeProps(),
 				}
 			}
+			go func() {
+				<-params.CancelChan
+				viewIsOn = false
+				params.RemoveViewData(uuidString)
+			}()
 			return View{
 				Params: dataProps,
 				On: func(eventName string, handler func([][]byte) interface{}) {
@@ -66,26 +73,23 @@ func createComponentParams(params *ComponentFactoryParams) *ComponentParams {
 		},
 		Run: func(component Component, viewParent View) (stop func()) {
 			parentUuid := ""
-			var cancelListeners []func()
 			if &viewParent != nil {
 				parentUuid = viewParent.Uuid
 			}
-			component(createComponentParams(&ComponentFactoryParams{
+			cancelChannel := make(chan *types.Nil)
+			go component(createComponentParams(&ComponentFactoryParams{
 				IsRoot:                false,
 				ParentUuid:            parentUuid,
 				UpdateViewData:        params.UpdateViewData,
 				CreateViewData:        params.CreateViewData,
 				RemoveViewData:        params.RemoveViewData,
 				ListenToFunctionProps: params.ListenToFunctionProps,
-				ListenToComponentCancel: func(onCancel func()) {
-					cancelListeners = append(cancelListeners, onCancel)
-				},
+				CancelChan:            cancelChannel,
 			}))
 			return func() {
-				for _, onCancel := range cancelListeners {
-					onCancel()
-				}
+				cancelChannel <- nil
 			}
 		},
+		Cancel: params.CancelChan,
 	}
 }

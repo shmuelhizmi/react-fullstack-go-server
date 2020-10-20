@@ -1,5 +1,7 @@
 package react_fullstack_go_server
 
+import "go/types"
+
 type View struct {
 	Params map[string]interface{}
 	On     func(eventName string, handler func([][]byte) interface{})
@@ -30,8 +32,9 @@ type Component func(params *ComponentParams)
 type CreateView func(layer uint16, view string, viewParent *View) View
 
 type ComponentParams struct {
-	View CreateView
-	Run  func(component Component, viewParent View) (stop func())
+	View   CreateView
+	Run    func(component Component, viewParent View) (stop func())
+	Cancel <-chan *types.Nil
 }
 
 type AppInstance struct {
@@ -42,19 +45,19 @@ type AppInstance struct {
 }
 
 type ComponentFactoryParams struct {
-	IsRoot                  bool
-	ParentUuid              string
-	UpdateViewData          func(viewData *ShareableViewData)
-	CreateViewData          func(viewData *ShareableViewData)
-	RemoveViewData          func(uuidString string)
-	ListenToFunctionProps   func(propUuid string, handler func(data [][]byte) interface{})
-	ListenToComponentCancel func(onCancel func())
+	IsRoot                bool
+	ParentUuid            string
+	UpdateViewData        func(viewData *ShareableViewData)
+	CreateViewData        func(viewData *ShareableViewData)
+	RemoveViewData        func(uuidString string)
+	ListenToFunctionProps func(propUuid string, handler func(data [][]byte) interface{})
+	CancelChan            <-chan *types.Nil
 }
 
 type TransportEventRequest struct {
-	EventArguments [][]byte `json:"eventArguments"`
-	Uuid           string   `json:"uid"`
-	EventUuid      string   `json:"eventUid"`
+	EventArguments []interface{} `json:"eventArguments"`
+	Uuid           string        `json:"uid"`
+	EventUuid      string        `json:"eventUid"`
 }
 
 type TransportEventResponse struct {

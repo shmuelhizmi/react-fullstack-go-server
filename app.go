@@ -3,6 +3,7 @@ package react_fullstack_go_server
 import (
 	"encoding/json"
 	gosocketio "github.com/graarh/golang-socketio"
+	"go/types"
 )
 
 func App(transport *gosocketio.Server, rootComponent func(params *ComponentParams)) AppInstance {
@@ -14,7 +15,35 @@ func App(transport *gosocketio.Server, rootComponent func(params *ComponentParam
 	transport.On(gosocketio.OnConnection, func(sender *gosocketio.Channel) {
 		sender.Emit("update_views_tree", TransportUpdateTree{Views: shareableViewData})
 	})
-	var rootComponentCancelListeners []func()
+	cancelChannel := make(chan *types.Nil)
+	functionPropsHandlers := make(map[string]func(data [][]byte) interface{})
+	transport.On("request_event", func(sender *gosocketio.Channel, data map[string]interface{}) {
+		event := TransportEventRequest{
+			EventArguments: data["eventArguments"].([]interface{}),
+			Uuid:           data["uid"].(string),
+			EventUuid:      data["eventUid"].(string),
+		}
+		if !isAppRunning {
+			return
+		}
+		handler, ok := functionPropsHandlers[event.EventUuid]
+		if ok {
+			go func() {
+				var arguments [][]byte
+				for _, data := range event.EventArguments {
+					argument, _ := json.Marshal(data)
+					arguments = append(arguments, argument)
+				}
+				handlerResult := handler(arguments)
+				result, _ := json.Marshal(TransportEventResponse{
+					Data:      handlerResult,
+					Uuid:      event.Uuid,
+					EventUuid: event.EventUuid,
+				})
+				sender.Emit("respond_to_event", result)
+			}()
+		}
+	})
 	go rootComponent(createComponentParams(&ComponentFactoryParams{
 		IsRoot:     true,
 		ParentUuid: "",
@@ -49,26 +78,9 @@ func App(transport *gosocketio.Server, rootComponent func(params *ComponentParam
 			}
 		},
 		ListenToFunctionProps: func(propUuid string, handler func(data [][]byte) interface{}) {
-			transport.On("request_event", func(sender *gosocketio.Channel, event TransportEventRequest) {
-				if !isAppRunning {
-					return
-				}
-				if event.EventUuid == propUuid {
-					go func() {
-						handlerResult := handler(event.EventArguments)
-						result, _ := json.Marshal(TransportEventResponse{
-							Data:      handlerResult,
-							Uuid:      event.Uuid,
-							EventUuid: propUuid,
-						})
-						sender.Emit("respond_to_event", result)
-					}()
-				}
-			})
+			functionPropsHandlers[propUuid] = handler
 		},
-		ListenToComponentCancel: func(onCancel func()) {
-			rootComponentCancelListeners = append(rootComponentCancelListeners, onCancel)
-		},
+		CancelChan: cancelChannel,
 	}))
 	return AppInstance{
 		IsAppRunning: &isAppRunning,
@@ -80,9 +92,7 @@ func App(transport *gosocketio.Server, rootComponent func(params *ComponentParam
 			transport.BroadcastToAll("update_views_tree", TransportUpdateTree{Views: shareableViewData})
 		},
 		Cancel: func() {
-			for _, onCancel := range rootComponentCancelListeners {
-				onCancel()
-			}
+			cancelChannel <- nil
 		},
 	}
 }
