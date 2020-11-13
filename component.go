@@ -7,7 +7,7 @@ func createComponentParams(params *ComponentFactoryParams) *ComponentParams {
 		View: func(layer uint16, view string, viewParent *View) View {
 			viewIsOn := false
 			dataProps := make(map[string]interface{})
-			functionProps := make(map[string]func(arguments [][]byte) interface{})
+			functionProps := make(map[string]interface{})
 			uuidString := StringUuid()
 			makeProps := func() []*ShareableViewDataProps {
 				props := make([]*ShareableViewDataProps, 0, len(dataProps)+len(functionProps))
@@ -52,7 +52,7 @@ func createComponentParams(params *ComponentFactoryParams) *ComponentParams {
 			}()
 			return View{
 				Params: dataProps,
-				On: func(eventName string, handler func([][]byte) interface{}) {
+				On: func(eventName string, handler interface{}) {
 					functionProps[eventName] = handler
 				},
 				Update: func() {

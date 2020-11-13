@@ -2,9 +2,17 @@ package react_fullstack_go_server
 
 import (
 	"encoding/json"
+	"errors"
 	gosocketio "github.com/graarh/golang-socketio"
 	"go/types"
+	"reflect"
 )
+
+func MakePointerFromStruct(someStruct interface{}) interface{} {
+	ptrValue := reflect.New(reflect.TypeOf(someStruct))
+	reflect.Indirect(ptrValue).Set(reflect.ValueOf(someStruct))
+	return ptrValue.Interface()
+}
 
 func App(transport *gosocketio.Server, rootComponent func(params *ComponentParams)) AppInstance {
 	isAppRunning := true
@@ -16,7 +24,7 @@ func App(transport *gosocketio.Server, rootComponent func(params *ComponentParam
 		sender.Emit("update_views_tree", TransportUpdateTree{Views: shareableViewData})
 	})
 	cancelChannel := make(chan *types.Nil)
-	functionPropsHandlers := make(map[string]func(data [][]byte) interface{})
+	functionPropsHandlers := make(map[string]interface{})
 	transport.On("request_event", func(sender *gosocketio.Channel, data map[string]interface{}) {
 		event := TransportEventRequest{
 			EventArguments: data["eventArguments"].([]interface{}),
@@ -29,18 +37,31 @@ func App(transport *gosocketio.Server, rootComponent func(params *ComponentParam
 		handler, ok := functionPropsHandlers[event.EventUuid]
 		if ok {
 			go func() {
-				var arguments [][]byte
-				for _, data := range event.EventArguments {
-					argument, _ := json.Marshal(data)
-					arguments = append(arguments, argument)
+				// Parsing JSON into function arguments
+				parameters:= make([]reflect.Value, 0)
+				funcHandler := reflect.ValueOf(handler)
+				funcHandlerType := reflect.TypeOf(handler)
+				handlerParameters:= make([]reflect.Type, 0)
+				handlerParametersLen := funcHandlerType.NumIn()
+				for i := 0; i < handlerParametersLen; i++ {
+					handlerParameters = append(handlerParameters, funcHandlerType.In(i))
 				}
-				handlerResult := handler(arguments)
+				for  index , handlerParameter := range handlerParameters {
+					emptyTypeInstance := reflect.New(handlerParameter).Interface()
+					if event.EventArguments[index] == nil {
+						panic(errors.New("missing argument"))
+					}
+					toJson, _ := json.Marshal(event.EventArguments[index])
+					_ = json.Unmarshal(toJson, &emptyTypeInstance)
+					parameters = append(parameters, reflect.Indirect(reflect.ValueOf(emptyTypeInstance)))
+				}
+				handlerResult := funcHandler.Call(parameters) // call function with parsed arguments
 				result, _ := json.Marshal(TransportEventResponse{
 					Data:      handlerResult,
 					Uuid:      event.Uuid,
 					EventUuid: event.EventUuid,
 				})
-				sender.Emit("respond_to_event", result)
+				sender.Emit("respond_to_event", result) // emit function result
 			}()
 		}
 	})
@@ -77,7 +98,7 @@ func App(transport *gosocketio.Server, rootComponent func(params *ComponentParam
 				transport.BroadcastToAll("delete_view", TransportViewDelete{ViewUuid: uuidString})
 			}
 		},
-		ListenToFunctionProps: func(propUuid string, handler func(data [][]byte) interface{}) {
+		ListenToFunctionProps: func(propUuid string, handler interface{}) {
 			functionPropsHandlers[propUuid] = handler
 		},
 		CancelChan: cancelChannel,

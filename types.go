@@ -4,7 +4,7 @@ import "go/types"
 
 type View struct {
 	Params map[string]interface{}
-	On     func(eventName string, handler func([][]byte) interface{})
+	On     func(eventName string, handler interface{})
 	Update func()
 	Start  func()
 	Stop   func()
@@ -50,7 +50,7 @@ type ComponentFactoryParams struct {
 	UpdateViewData        func(viewData *ShareableViewData)
 	CreateViewData        func(viewData *ShareableViewData)
 	RemoveViewData        func(uuidString string)
-	ListenToFunctionProps func(propUuid string, handler func(data [][]byte) interface{})
+	ListenToFunctionProps func(propUuid string, handler interface{})
 	CancelChan            <-chan *types.Nil
 }
 

@@ -1,6 +1,8 @@
 package react_fullstack_go_server
 
-import "github.com/google/uuid"
+import (
+	"github.com/google/uuid"
+)
 
 func StringUuid() string {
 	uuidByte, _ := uuid.NewUUID()
